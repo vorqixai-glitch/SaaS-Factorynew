@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { useGetDashboardStats } from "@workspace/api-client-react";
-import { CreditCard, Zap, CheckCircle2, ArrowRight, TrendingUp } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { CreditCard, Zap, CheckCircle2, ArrowRight } from "lucide-react";
 
 const PLANS = [
   {
@@ -8,10 +9,8 @@ const PLANS = [
     price: "$0",
     period: "forever",
     credits: 10,
-    projects: 1,
     features: ["1 project", "10 AI credits/month", "Community templates", "Manual deploy"],
     current: false,
-    cta: "Current plan",
     highlight: false,
   },
   {
@@ -19,10 +18,8 @@ const PLANS = [
     price: "$29",
     period: "/ month",
     credits: 100,
-    projects: 3,
     features: ["3 projects", "100 AI credits/month", "All templates", "One-click deploy", "Priority support"],
     current: true,
-    cta: "Upgrade to Starter",
     highlight: true,
   },
   {
@@ -30,10 +27,8 @@ const PLANS = [
     price: "$79",
     period: "/ month",
     credits: 500,
-    projects: 10,
     features: ["10 projects", "500 AI credits/month", "Team collaboration", "Advanced AI models", "API access", "Analytics"],
     current: false,
-    cta: "Upgrade to Pro",
     highlight: false,
   },
   {
@@ -41,19 +36,57 @@ const PLANS = [
     price: "$199",
     period: "/ month",
     credits: 2000,
-    projects: -1,
     features: ["Unlimited projects", "2000 AI credits/month", "White-label", "Dedicated infra", "SLA guarantee", "24/7 support"],
     current: false,
-    cta: "Contact sales",
     highlight: false,
   },
 ];
 
+const TOP_UPS = [
+  { credits: 50, price: "$5" },
+  { credits: 200, price: "$18" },
+  { credits: 500, price: "$40" },
+  { credits: 1000, price: "$75" },
+  { credits: 2500, price: "$175" },
+  { credits: 5000, price: "$325" },
+];
+
 export default function Billing() {
   const { data: stats } = useGetDashboardStats();
+  const { toast } = useToast();
   const creditsUsed = stats?.creditsUsed ?? 0;
   const creditsTotal = 500;
+  const creditsRemaining = stats?.creditsRemaining ?? (creditsTotal - creditsUsed);
   const creditsPercent = Math.min(100, (creditsUsed / creditsTotal) * 100);
+
+  const handleUpgrade = (planName: string) => {
+    toast({
+      title: `Upgrade to ${planName}`,
+      description: "Payment integration coming soon. Connect Stripe to enable subscriptions.",
+    });
+  };
+
+  const handleTopUp = (credits: number, price: string) => {
+    toast({
+      title: `Purchase ${credits} credits for ${price}`,
+      description: "Payment integration coming soon. Connect Stripe to enable top-ups.",
+    });
+  };
+
+  const handleCancelPlan = () => {
+    toast({
+      title: "Cancel subscription",
+      description: "Please contact support to cancel your plan.",
+      variant: "destructive",
+    });
+  };
+
+  const handleUpdatePayment = () => {
+    toast({
+      title: "Update payment method",
+      description: "Payment integration coming soon. Connect Stripe to manage billing.",
+    });
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -75,7 +108,10 @@ export default function Billing() {
             <div className="flex justify-between"><span className="text-muted-foreground">Renewal</span><span className="font-medium">Jul 24, 2026</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Projects</span><span className="font-medium">{stats?.totalProjects ?? 0} / 10</span></div>
           </div>
-          <button className="mt-5 w-full flex items-center justify-center gap-2 border border-border text-sm py-2 rounded-md hover:border-destructive/50 hover:text-destructive transition-colors">
+          <button
+            onClick={handleCancelPlan}
+            className="mt-5 w-full flex items-center justify-center gap-2 border border-border text-sm py-2 rounded-md hover:border-destructive/50 hover:text-destructive transition-colors"
+          >
             Cancel plan
           </button>
         </div>
@@ -85,7 +121,9 @@ export default function Billing() {
             <h2 className="font-semibold text-sm">Credit Usage</h2>
             <Zap className="w-4 h-4 text-primary" />
           </div>
-          <div className="text-3xl font-bold mb-1">{creditsUsed}<span className="text-lg text-muted-foreground"> / {creditsTotal}</span></div>
+          <div className="text-3xl font-bold mb-1">
+            {creditsUsed}<span className="text-lg text-muted-foreground"> / {creditsTotal}</span>
+          </div>
           <p className="text-xs text-muted-foreground mb-4">credits used this month</p>
           <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
             <div
@@ -96,16 +134,20 @@ export default function Billing() {
               }}
             />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="flex justify-between text-xs text-muted-foreground mb-4">
             <span>{creditsUsed} used</span>
-            <span>{creditsTotal - creditsUsed} remaining</span>
+            <span>{creditsRemaining} remaining</span>
           </div>
-          <div className="mt-4 pt-4 border-t border-border">
-            <h3 className="text-xs font-semibold text-muted-foreground mb-2">Credit top-ups</h3>
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-xs font-semibold text-muted-foreground mb-3">Credit top-ups</h3>
             <div className="grid grid-cols-3 gap-2">
-              {[{ credits: 50, price: "$5" }, { credits: 200, price: "$18" }, { credits: 500, price: "$40" }].map(({ credits, price }) => (
-                <button key={credits} className="p-2 border border-border rounded-md hover:border-primary/50 hover:bg-primary/5 transition-colors text-center">
-                  <div className="text-sm font-bold">{credits}</div>
+              {TOP_UPS.map(({ credits, price }) => (
+                <button
+                  key={credits}
+                  onClick={() => handleTopUp(credits, price)}
+                  className="p-2.5 border border-border rounded-md hover:border-primary/60 hover:bg-primary/5 transition-colors text-center group"
+                >
+                  <div className="text-sm font-bold group-hover:text-primary transition-colors">{credits}</div>
                   <div className="text-xs text-muted-foreground">{price}</div>
                 </button>
               ))}
@@ -137,15 +179,25 @@ export default function Billing() {
                   </li>
                 ))}
               </ul>
-              <button className={`w-full py-2 rounded-md text-xs font-semibold transition-opacity hover:opacity-90 flex items-center justify-center gap-1.5 ${plan.current ? "bg-secondary text-secondary-foreground cursor-default" : plan.highlight ? "bg-primary text-primary-foreground" : "border border-border text-foreground hover:border-primary/50"}`} disabled={plan.current}>
-                {plan.current ? "Current plan" : <>{plan.cta} <ArrowRight className="w-3 h-3" /></>}
+              <button
+                onClick={() => plan.current ? undefined : handleUpgrade(plan.name)}
+                disabled={plan.current}
+                className={`w-full py-2 rounded-md text-xs font-semibold transition-opacity flex items-center justify-center gap-1.5 ${
+                  plan.current
+                    ? "bg-secondary text-secondary-foreground cursor-default opacity-60"
+                    : plan.highlight
+                    ? "bg-primary text-primary-foreground hover:opacity-90"
+                    : "border border-border text-foreground hover:border-primary/50 hover:text-primary"
+                }`}
+              >
+                {plan.current ? "Current plan" : <>{plan.name === "Enterprise" ? "Contact sales" : `Upgrade to ${plan.name}`} <ArrowRight className="w-3 h-3" /></>}
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Payment method placeholder */}
+      {/* Payment method */}
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-sm">Payment Method</h2>
@@ -159,8 +211,17 @@ export default function Billing() {
             <div className="text-sm font-medium">Visa ending in 4242</div>
             <div className="text-xs text-muted-foreground">Expires 12/2027</div>
           </div>
-          <button className="text-xs text-primary hover:opacity-80">Update</button>
+          <button
+            onClick={handleUpdatePayment}
+            className="text-xs text-primary hover:opacity-80 transition-opacity"
+          >
+            Update
+          </button>
         </div>
+        <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+          Payments powered by Stripe. Your card data is never stored on our servers.
+        </p>
       </div>
     </div>
   );

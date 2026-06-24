@@ -78,10 +78,11 @@ export default function Templates() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground flex-1 leading-relaxed mb-4">{t.description}</p>
-                <Link href={`/dashboard/new?template=${t.id}`}>
-                  <a className="flex items-center justify-center gap-2 border border-border text-sm font-medium py-2 rounded-md hover:border-primary hover:text-primary transition-colors group-hover:border-primary/60">
-                    Use template <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
+                <Link
+                  href={`/dashboard/new?template=${t.id}`}
+                  className="flex items-center justify-center gap-2 border border-border text-sm font-medium py-2 rounded-md hover:border-primary hover:text-primary transition-colors group-hover:border-primary/60"
+                >
+                  Use template <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             );

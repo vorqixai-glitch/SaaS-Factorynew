@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { useListTemplates, useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
+import { useListTemplates, useCreateProject, getListProjectsQueryKey, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, FileCode, Users, GraduationCap, ShoppingCart, BarChart3, Rocket, Store, Code2, Calendar, MessageSquare, FileText, Loader2, ArrowRight, Check } from "lucide-react";
 
@@ -10,20 +10,28 @@ const iconMap: Record<string, React.ElementType> = {
 
 export default function NewProject() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const queryClient = useQueryClient();
   const { data: templates } = useListTemplates();
   const createMutation = useCreateProject({
     mutation: {
       onSuccess: (project) => {
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
         navigate(`/dashboard/${project.id}`);
       }
     }
   });
 
+  const urlTemplate = new URLSearchParams(search).get("template") ?? "blank";
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("blank");
+  const [selectedTemplate, setSelectedTemplate] = useState(urlTemplate);
+
+  useEffect(() => {
+    setSelectedTemplate(urlTemplate);
+  }, [urlTemplate]);
 
   const handleCreate = () => {
     if (!name.trim()) return;
@@ -46,8 +54,10 @@ export default function NewProject() {
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCreate()}
             placeholder="My SaaS Product"
             className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+            autoFocus
           />
         </div>
         <div>
@@ -91,6 +101,12 @@ export default function NewProject() {
           })}
         </div>
       </div>
+
+      {createMutation.isError && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive">
+          Failed to create project. Please try again.
+        </div>
+      )}
 
       <button
         onClick={handleCreate}
