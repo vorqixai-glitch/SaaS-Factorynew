@@ -76,10 +76,8 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
               <ExternalLink className="w-3.5 h-3.5" /> Live URL
             </a>
           )}
-          <Link href={`/dashboard/${project.id}/generate`}>
-            <a className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs px-3 py-1.5 rounded-md hover:opacity-90 transition-opacity">
-              <Zap className="w-3.5 h-3.5" /> Generate
-            </a>
+          <Link href={`/dashboard/${project.id}/generate`} className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs px-3 py-1.5 rounded-md hover:opacity-90 transition-opacity">
+            <Zap className="w-3.5 h-3.5" /> Generate
           </Link>
         </div>
       </div>
@@ -113,23 +111,19 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
           <div className="bg-card border border-border rounded-xl p-5 space-y-4">
             <h3 className="font-semibold text-sm">Quick Actions</h3>
             <div className="space-y-2">
-              <Link href={`/dashboard/${project.id}/generate`}>
-                <a className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all group">
-                  <Zap className="w-4 h-4 text-primary" />
-                  <div>
-                    <div className="text-sm font-medium">AI Generate</div>
-                    <div className="text-xs text-muted-foreground">Generate code with AI prompt</div>
-                  </div>
-                </a>
+              <Link href={`/dashboard/${project.id}/generate`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all group">
+                <Zap className="w-4 h-4 text-primary" />
+                <div>
+                  <div className="text-sm font-medium">AI Generate</div>
+                  <div className="text-xs text-muted-foreground">Generate code with AI prompt</div>
+                </div>
               </Link>
-              <Link href={`/dashboard/${project.id}/deploy`}>
-                <a className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all">
-                  <Rocket className="w-4 h-4 text-primary" />
-                  <div>
-                    <div className="text-sm font-medium">Deploy</div>
-                    <div className="text-xs text-muted-foreground">{deployments?.length ? `${deployments.length} deployments` : "Not deployed yet"}</div>
-                  </div>
-                </a>
+              <Link href={`/dashboard/${project.id}/deploy`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all">
+                <Rocket className="w-4 h-4 text-primary" />
+                <div>
+                  <div className="text-sm font-medium">Deploy</div>
+                  <div className="text-xs text-muted-foreground">{deployments?.length ? `${deployments.length} deployments` : "Not deployed yet"}</div>
+                </div>
               </Link>
             </div>
           </div>
@@ -156,10 +150,8 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
             <div className="p-12 text-center">
               <Code2 className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">No code generated yet.</p>
-              <Link href={`/dashboard/${project.id}/generate`}>
-                <a className="mt-3 inline-flex items-center gap-2 text-sm text-primary hover:opacity-80">
-                  <Zap className="w-3.5 h-3.5" /> Generate with AI
-                </a>
+              <Link href={`/dashboard/${project.id}/generate`} className="mt-3 inline-flex items-center gap-2 text-sm text-primary hover:opacity-80">
+                <Zap className="w-3.5 h-3.5" /> Generate with AI
               </Link>
             </div>
           )}
@@ -193,10 +185,8 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Deployments</h3>
-            <Link href={`/dashboard/${project.id}/deploy`}>
-              <a className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90">
-                <Rocket className="w-3.5 h-3.5" /> Deploy Now
-              </a>
+            <Link href={`/dashboard/${project.id}/deploy`} className="flex items-center gap-2 bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-xs font-medium hover:opacity-90">
+              <Rocket className="w-3.5 h-3.5" /> Deploy Now
             </Link>
           </div>
           {!deployments?.length ? (
