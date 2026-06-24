@@ -233,9 +233,7 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
           <div className="pt-4 border-t border-border">
             <h4 className="text-sm font-semibold text-destructive mb-2">Danger Zone</h4>
             <p className="text-xs text-muted-foreground mb-3">Deleting a project is permanent and cannot be undone.</p>
-            <Link href="/dashboard">
-              <a className="text-xs border border-destructive/50 text-destructive px-3 py-1.5 rounded-md hover:bg-destructive/10 transition-colors">Delete Project</a>
-            </Link>
+            <DeleteProjectButton projectId={project.id} projectName={project.name} />
           </div>
         </div>
       )}
