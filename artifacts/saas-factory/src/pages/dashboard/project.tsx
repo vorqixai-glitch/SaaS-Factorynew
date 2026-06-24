@@ -1,7 +1,12 @@
 import { useState } from "react";
-import { Link } from "wouter";
-import { useGetProject, useListProjectFiles, useListDeployments, getGetProjectQueryKey } from "@workspace/api-client-react";
-import { Code2, Eye, Rocket, Settings, Zap, Globe, Clock, ChevronLeft, ExternalLink } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import {
+  useGetProject, useListProjectFiles, useListDeployments, useDeleteProject, useUpdateProject,
+  getGetProjectQueryKey, getListProjectsQueryKey, getGetDashboardStatsQueryKey,
+  getListDeploymentsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Code2, Eye, Rocket, Settings, Zap, Globe, Clock, ChevronLeft, ExternalLink, Loader2, Trash2, Save } from "lucide-react";
 
 type Tab = "overview" | "code" | "preview" | "deploy" | "settings";
 
@@ -21,13 +26,75 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
+function DeleteProjectButton({ projectId, projectName }: { projectId: number; projectName: string }) {
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const deleteMutation = useDeleteProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        navigate("/dashboard");
+      },
+    },
+  });
+
+  if (confirming) {
+    return (
+      <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-3">
+        <p className="text-xs text-destructive font-medium">Delete "{projectName}"? This cannot be undone.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => deleteMutation.mutate({ id: projectId })}
+            disabled={deleteMutation.isPending}
+            className="flex items-center gap-1.5 text-xs bg-destructive text-destructive-foreground px-3 py-1.5 rounded-md hover:opacity-90 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            Yes, delete
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            className="text-xs border border-border px-3 py-1.5 rounded-md hover:border-primary/50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setConfirming(true)}
+      className="text-xs border border-destructive/50 text-destructive px-3 py-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+    >
+      Delete Project
+    </button>
+  );
+}
+
 export default function ProjectDetail({ params }: { params: Record<string, string> }) {
   const id = Number(params.id);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [settingsInit, setSettingsInit] = useState(false);
 
   const { data: project, isLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
   const { data: files } = useListProjectFiles(id, { query: { enabled: !!id, queryKey: ["list-project-files", id] as const } });
-  const { data: deployments } = useListDeployments(id, { query: { enabled: !!id, queryKey: ["list-deployments", id] as const } });
+  const { data: deployments } = useListDeployments(id, { query: { enabled: !!id, queryKey: getListDeploymentsQueryKey(id) } });
+
+  const updateMutation = useUpdateProject({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+      },
+    },
+  });
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "overview", label: "Overview", icon: Globe },
@@ -55,10 +122,27 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
     );
   }
 
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    if (tab === "settings" && !settingsInit && project) {
+      setEditName(project.name);
+      setEditDesc(project.description ?? "");
+      setSettingsInit(true);
+    }
+  };
+
+  const handleSaveSettings = () => {
+    if (!editName.trim()) return;
+    updateMutation.mutate({ id, data: { name: editName.trim(), description: editDesc.trim() || undefined } });
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors"><ChevronLeft className="w-5 h-5" /></Link>
+        <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronLeft className="w-5 h-5" />
+        </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold truncate">{project.name}</h1>
@@ -84,18 +168,18 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
 
       {/* Tabs */}
       <div className="border-b border-border flex gap-0.5">
-        {tabs.map(({ id, label, icon: Icon }) => (
+        {tabs.map(({ id: tabId, label, icon: Icon }) => (
           <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            key={tabId}
+            onClick={() => handleTabChange(tabId)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${activeTab === tabId ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             <Icon className="w-3.5 h-3.5" />{label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Overview */}
       {activeTab === "overview" && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="bg-card border border-border rounded-xl p-5 space-y-4">
@@ -111,7 +195,7 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
           <div className="bg-card border border-border rounded-xl p-5 space-y-4">
             <h3 className="font-semibold text-sm">Quick Actions</h3>
             <div className="space-y-2">
-              <Link href={`/dashboard/${project.id}/generate`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all group">
+              <Link href={`/dashboard/${project.id}/generate`} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all">
                 <Zap className="w-4 h-4 text-primary" />
                 <div>
                   <div className="text-sm font-medium">AI Generate</div>
@@ -122,7 +206,7 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
                 <Rocket className="w-4 h-4 text-primary" />
                 <div>
                   <div className="text-sm font-medium">Deploy</div>
-                  <div className="text-xs text-muted-foreground">{deployments?.length ? `${deployments.length} deployments` : "Not deployed yet"}</div>
+                  <div className="text-xs text-muted-foreground">{deployments?.length ? `${deployments.length} deployment${deployments.length !== 1 ? "s" : ""}` : "Not deployed yet"}</div>
                 </div>
               </Link>
             </div>
@@ -136,6 +220,7 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
         </div>
       )}
 
+      {/* Code */}
       {activeTab === "code" && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/50">
@@ -143,14 +228,14 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
             <span className="text-xs text-muted-foreground">{files?.length ?? 0} files</span>
           </div>
           {project.generatedCode ? (
-            <pre className="p-5 text-xs font-mono text-foreground overflow-auto max-h-[500px] leading-relaxed whitespace-pre-wrap">
+            <pre className="p-5 text-xs font-mono text-foreground overflow-auto max-h-[60vh] leading-relaxed whitespace-pre-wrap">
               {project.generatedCode}
             </pre>
           ) : (
             <div className="p-12 text-center">
               <Code2 className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No code generated yet.</p>
-              <Link href={`/dashboard/${project.id}/generate`} className="mt-3 inline-flex items-center gap-2 text-sm text-primary hover:opacity-80">
+              <p className="text-sm text-muted-foreground mb-3">No code generated yet.</p>
+              <Link href={`/dashboard/${project.id}/generate`} className="inline-flex items-center gap-2 text-sm text-primary hover:opacity-80">
                 <Zap className="w-3.5 h-3.5" /> Generate with AI
               </Link>
             </div>
@@ -158,6 +243,7 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
         </div>
       )}
 
+      {/* Preview */}
       {activeTab === "preview" && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-background/50 flex items-center gap-2">
@@ -166,7 +252,9 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
               <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
               <div className="w-3 h-3 rounded-full bg-green-500/60" />
             </div>
-            <span className="text-xs text-muted-foreground font-mono flex-1 text-center">{project.previewUrl ?? project.deployedUrl ?? "No preview available"}</span>
+            <span className="text-xs text-muted-foreground font-mono flex-1 text-center truncate">
+              {project.deployedUrl ?? "No preview available"}
+            </span>
           </div>
           {project.deployedUrl ? (
             <iframe src={project.deployedUrl} className="w-full h-[500px] bg-white" title="Preview" />
@@ -174,13 +262,17 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
             <div className="h-[400px] flex items-center justify-center">
               <div className="text-center">
                 <Eye className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Deploy your project to see a live preview.</p>
+                <p className="text-sm text-muted-foreground mb-3">Deploy your project to see a live preview.</p>
+                <Link href={`/dashboard/${project.id}/deploy`} className="inline-flex items-center gap-2 text-sm text-primary hover:opacity-80">
+                  <Rocket className="w-3.5 h-3.5" /> Go to Deploy
+                </Link>
               </div>
             </div>
           )}
         </div>
       )}
 
+      {/* Deploy */}
       {activeTab === "deploy" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -217,22 +309,46 @@ export default function ProjectDetail({ params }: { params: Record<string, strin
         </div>
       )}
 
+      {/* Settings */}
       {activeTab === "settings" && (
-        <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <h3 className="font-semibold">Project Settings</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Project Name</label>
-              <input defaultValue={project.name} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary" />
+        <div className="space-y-6">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+            <h3 className="font-semibold">Project Settings</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Project Name</label>
+                <input
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  rows={3}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
-              <textarea defaultValue={project.description ?? ""} rows={3} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none" />
-            </div>
+            <button
+              onClick={handleSaveSettings}
+              disabled={!editName.trim() || updateMutation.isPending}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Changes
+            </button>
+            {updateMutation.isSuccess && (
+              <p className="text-xs text-green-400">Saved!</p>
+            )}
           </div>
-          <div className="pt-4 border-t border-border">
+
+          <div className="bg-card border border-border rounded-xl p-6">
             <h4 className="text-sm font-semibold text-destructive mb-2">Danger Zone</h4>
-            <p className="text-xs text-muted-foreground mb-3">Deleting a project is permanent and cannot be undone.</p>
+            <p className="text-xs text-muted-foreground mb-4">Deleting a project removes all its code, files, and deployment history permanently.</p>
             <DeleteProjectButton projectId={project.id} projectName={project.name} />
           </div>
         </div>

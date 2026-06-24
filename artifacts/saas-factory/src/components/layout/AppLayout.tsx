@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Plus, FileCode, CreditCard, Layers, Menu, X, Zap } from "lucide-react";
+import { LayoutDashboard, Plus, CreditCard, Layers, Menu, X, Zap } from "lucide-react";
 import { useState } from "react";
+import { useGetDashboardStats } from "@workspace/api-client-react";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -12,6 +13,11 @@ const navItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: stats } = useGetDashboardStats();
+
+  const creditsUsed = stats?.creditsUsed ?? 0;
+  const creditsTotal = 500;
+  const creditsPercent = Math.min(100, (creditsUsed / creditsTotal) * 100);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -39,11 +45,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="px-4 py-4 border-t border-sidebar-border">
-          <div className="text-xs text-muted-foreground mb-1">Credits</div>
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full" style={{ width: "40%" }} />
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted-foreground">Credits</span>
+            <Link href="/billing" className="text-xs text-primary hover:opacity-80">Top up</Link>
           </div>
-          <div className="text-xs text-muted-foreground mt-1.5">200 / 500 used</div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${creditsPercent}%`,
+                background: creditsPercent > 80 ? "hsl(var(--destructive))" : "hsl(var(--primary))",
+              }}
+            />
+          </div>
+          <div className="text-xs text-muted-foreground mt-1.5">{creditsUsed} / {creditsTotal} used</div>
         </div>
       </aside>
 

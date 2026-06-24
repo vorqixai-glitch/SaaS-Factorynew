@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, projectsTable, projectFilesTable, deploymentsTable, activityTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
+import OpenAI from "openai";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -16,6 +17,8 @@ import {
 } from "@workspace/api-zod";
 
 const router = Router();
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Math.random().toString(36).slice(2, 7);
@@ -89,6 +92,9 @@ router.patch("/projects/:id", async (req, res) => {
 router.delete("/projects/:id", async (req, res) => {
   const parsed = DeleteProjectParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(deploymentsTable).where(eq(deploymentsTable.projectId, parsed.data.id));
+  await db.delete(projectFilesTable).where(eq(projectFilesTable.projectId, parsed.data.id));
+  await db.delete(activityTable).where(eq(activityTable.projectId, parsed.data.id));
   await db.delete(projectsTable).where(eq(projectsTable.id, parsed.data.id));
   res.status(204).send();
 });
@@ -102,26 +108,72 @@ router.post("/projects/:id/generate", async (req, res) => {
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, paramParsed.data.id));
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
 
-  const creditsToUse = 5;
-  const prompt = bodyParsed.data.prompt;
+  await db.update(projectsTable)
+    .set({ status: "generating", updatedAt: new Date() })
+    .where(eq(projectsTable.id, paramParsed.data.id));
 
-  const mockCode = `// Generated SaaS: ${project.name}
-// Prompt: ${prompt}
-import React from 'react';
-export default function App() {
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold">${project.name}</h1>
-        <p className="mt-4 text-gray-400">${prompt}</p>
-      </div>
-    </div>
-  );
-}`;
+  const prompt = bodyParsed.data.prompt;
+  const model = bodyParsed.data.model ?? "gpt-4o-mini";
+
+  const systemPrompt = `You are an expert full-stack developer. Generate production-ready SaaS code based on the user's description.
+Output a complete React + TypeScript application with:
+- A well-structured App.tsx as the main entry point
+- Multiple page components for all features described
+- Tailwind CSS for styling (dark theme preferred)
+- Realistic mock data so the UI looks populated
+- Clean, readable code with proper TypeScript types
+
+Format your response as multiple code files using this exact format for each file:
+=== filename.tsx ===
+<file content here>
+
+Start with App.tsx, then create all necessary component files. Make it look professional and complete.`;
+
+  let generatedCode = "";
+  let creditsToUse = 5;
+
+  try {
+    const openaiModel = model.startsWith("claude") ? "gpt-4o" : model;
+    const completion = await openai.chat.completions.create({
+      model: openaiModel,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Build this SaaS product:\n\nName: ${project.name}\nTemplate: ${project.template}\nDescription: ${project.description ?? ""}\n\nUser requirements: ${prompt}` },
+      ],
+    });
+
+    generatedCode = completion.choices[0]?.message?.content ?? "";
+    creditsToUse = Math.ceil((completion.usage?.total_tokens ?? 1000) / 200);
+  } catch (err) {
+    req.log.error({ err }, "OpenAI generation failed");
+    await db.update(projectsTable)
+      .set({ status: "error", updatedAt: new Date() })
+      .where(eq(projectsTable.id, paramParsed.data.id));
+    res.status(500).json({ error: "AI generation failed. Please try again." });
+    return;
+  }
 
   await db.update(projectsTable)
-    .set({ status: "ready", generatedCode: mockCode, creditsUsed: project.creditsUsed + creditsToUse, updatedAt: new Date() })
+    .set({ status: "ready", generatedCode, creditsUsed: project.creditsUsed + creditsToUse, updatedAt: new Date() })
     .where(eq(projectsTable.id, paramParsed.data.id));
+
+  const fileMatches = [...generatedCode.matchAll(/=== (.+?) ===\n([\s\S]*?)(?=\n=== |$)/g)];
+  if (fileMatches.length > 0) {
+    await db.delete(projectFilesTable).where(eq(projectFilesTable.projectId, paramParsed.data.id));
+    for (const match of fileMatches) {
+      const filePath = match[1].trim();
+      const content = match[2].trim();
+      const ext = filePath.split(".").pop() ?? "tsx";
+      const language = ext === "ts" || ext === "tsx" ? "typescript" : ext === "css" ? "css" : "javascript";
+      await db.insert(projectFilesTable).values({
+        projectId: paramParsed.data.id,
+        filePath,
+        content,
+        language,
+      });
+    }
+  }
 
   await db.insert(activityTable).values({
     type: "generated",
@@ -130,7 +182,7 @@ export default function App() {
     projectId: project.id,
   });
 
-  res.json({ success: true, message: "Generation complete", creditsUsed: creditsToUse, generatedCode: mockCode });
+  res.json({ success: true, message: "Generation complete", creditsUsed: creditsToUse, generatedCode });
 });
 
 router.post("/projects/:id/deploy", async (req, res) => {
@@ -143,7 +195,7 @@ router.post("/projects/:id/deploy", async (req, res) => {
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
 
   const platform = bodyParsed.data.platform;
-  const mockUrl = `https://${project.slug}.${platform}.app`;
+  const mockUrl = `https://${project.slug}.${platform === "vercel" ? "vercel.app" : platform === "netlify" ? "netlify.app" : "repl.co"}`;
 
   const [deployment] = await db.insert(deploymentsTable)
     .values({ projectId: paramParsed.data.id, platform, status: "live", deployedUrl: mockUrl })
