@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, projectsTable, projectFilesTable, deploymentsTable, activityTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import OpenAI from "openai";
 import {
   CreateProjectBody,
@@ -34,48 +34,50 @@ function serializeProject(p: typeof projectsTable.$inferSelect) {
 }
 
 function serializeDeployment(d: typeof deploymentsTable.$inferSelect) {
-  return {
-    ...d,
-    createdAt: d.createdAt.toISOString(),
-  };
+  return { ...d, createdAt: d.createdAt.toISOString() };
 }
 
 function serializeFile(f: typeof projectFilesTable.$inferSelect) {
-  return {
-    ...f,
-    createdAt: f.createdAt.toISOString(),
-  };
+  return { ...f, createdAt: f.createdAt.toISOString() };
 }
 
+// GET /projects — list only the current user's projects
 router.get("/projects", async (req, res) => {
-  const projects = await db.select().from(projectsTable).orderBy(desc(projectsTable.updatedAt));
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const projects = await db.select().from(projectsTable)
+    .where(eq(projectsTable.userId, req.user.id))
+    .orderBy(desc(projectsTable.updatedAt));
   res.json(projects.map(serializeProject));
 });
 
+// POST /projects — create project owned by current user
 router.post("/projects", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = CreateProjectBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { name, description, template } = parsed.data;
   const [project] = await db
     .insert(projectsTable)
-    .values({ name, description: description ?? null, slug: slugify(name), template: template ?? "blank", status: "draft" })
+    .values({ userId: req.user.id, name, description: description ?? null, slug: slugify(name), template: template ?? "blank", status: "draft" })
     .returning();
-  await db.insert(activityTable).values({ type: "created", message: `Project "${name}" created`, projectName: name, projectId: project.id });
+  await db.insert(activityTable).values({ userId: req.user.id, type: "created", message: `Project "${name}" created`, projectName: name, projectId: project.id });
   res.status(201).json(serializeProject(project));
 });
 
+// GET /projects/:id — only if owned by current user
 router.get("/projects/:id", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = GetProjectParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, parsed.data.id));
+  const [project] = await db.select().from(projectsTable)
+    .where(and(eq(projectsTable.id, parsed.data.id), eq(projectsTable.userId, req.user.id)));
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
   res.json(serializeProject(project));
 });
 
+// PATCH /projects/:id
 router.patch("/projects/:id", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const paramParsed = UpdateProjectParams.safeParse({ id: Number(req.params.id) });
   if (!paramParsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const bodyParsed = UpdateProjectBody.safeParse(req.body);
@@ -83,15 +85,21 @@ router.patch("/projects/:id", async (req, res) => {
   const [updated] = await db
     .update(projectsTable)
     .set({ ...bodyParsed.data, updatedAt: new Date() })
-    .where(eq(projectsTable.id, paramParsed.data.id))
+    .where(and(eq(projectsTable.id, paramParsed.data.id), eq(projectsTable.userId, req.user.id)))
     .returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   res.json(serializeProject(updated));
 });
 
+// DELETE /projects/:id
 router.delete("/projects/:id", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = DeleteProjectParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  // Verify ownership first
+  const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
+    .where(and(eq(projectsTable.id, parsed.data.id), eq(projectsTable.userId, req.user.id)));
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(deploymentsTable).where(eq(deploymentsTable.projectId, parsed.data.id));
   await db.delete(projectFilesTable).where(eq(projectFilesTable.projectId, parsed.data.id));
   await db.delete(activityTable).where(eq(activityTable.projectId, parsed.data.id));
@@ -99,13 +107,16 @@ router.delete("/projects/:id", async (req, res) => {
   res.status(204).send();
 });
 
+// POST /projects/:id/generate
 router.post("/projects/:id/generate", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const paramParsed = GenerateProjectParams.safeParse({ id: Number(req.params.id) });
   if (!paramParsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const bodyParsed = GenerateProjectBody.safeParse(req.body);
   if (!bodyParsed.success) { res.status(400).json({ error: bodyParsed.error.message }); return; }
 
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, paramParsed.data.id));
+  const [project] = await db.select().from(projectsTable)
+    .where(and(eq(projectsTable.id, paramParsed.data.id), eq(projectsTable.userId, req.user.id)));
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
 
   await db.update(projectsTable)
@@ -166,16 +177,12 @@ Start with App.tsx, then create all necessary component files. Make it look prof
       const content = match[2].trim();
       const ext = filePath.split(".").pop() ?? "tsx";
       const language = ext === "ts" || ext === "tsx" ? "typescript" : ext === "css" ? "css" : "javascript";
-      await db.insert(projectFilesTable).values({
-        projectId: paramParsed.data.id,
-        filePath,
-        content,
-        language,
-      });
+      await db.insert(projectFilesTable).values({ projectId: paramParsed.data.id, filePath, content, language });
     }
   }
 
   await db.insert(activityTable).values({
+    userId: req.user.id,
     type: "generated",
     message: `AI generation complete for "${project.name}"`,
     projectName: project.name,
@@ -185,13 +192,16 @@ Start with App.tsx, then create all necessary component files. Make it look prof
   res.json({ success: true, message: "Generation complete", creditsUsed: creditsToUse, generatedCode });
 });
 
+// POST /projects/:id/deploy
 router.post("/projects/:id/deploy", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const paramParsed = DeployProjectParams.safeParse({ id: Number(req.params.id) });
   if (!paramParsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const bodyParsed = DeployProjectBody.safeParse(req.body);
   if (!bodyParsed.success) { res.status(400).json({ error: bodyParsed.error.message }); return; }
 
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, paramParsed.data.id));
+  const [project] = await db.select().from(projectsTable)
+    .where(and(eq(projectsTable.id, paramParsed.data.id), eq(projectsTable.userId, req.user.id)));
   if (!project) { res.status(404).json({ error: "Not found" }); return; }
 
   const platform = bodyParsed.data.platform;
@@ -206,6 +216,7 @@ router.post("/projects/:id/deploy", async (req, res) => {
     .where(eq(projectsTable.id, paramParsed.data.id));
 
   await db.insert(activityTable).values({
+    userId: req.user.id,
     type: "deployed",
     message: `"${project.name}" deployed to ${platform}`,
     projectName: project.name,
@@ -215,18 +226,29 @@ router.post("/projects/:id/deploy", async (req, res) => {
   res.status(201).json(serializeDeployment(deployment));
 });
 
+// GET /projects/:id/deployments
 router.get("/projects/:id/deployments", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = ListDeploymentsParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  // Verify ownership
+  const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
+    .where(and(eq(projectsTable.id, parsed.data.id), eq(projectsTable.userId, req.user.id)));
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
   const deployments = await db.select().from(deploymentsTable)
     .where(eq(deploymentsTable.projectId, parsed.data.id))
     .orderBy(desc(deploymentsTable.createdAt));
   res.json(deployments.map(serializeDeployment));
 });
 
+// GET /projects/:id/files
 router.get("/projects/:id/files", async (req, res) => {
+  if (!req.isAuthenticated()) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = ListProjectFilesParams.safeParse({ id: Number(req.params.id) });
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
+    .where(and(eq(projectsTable.id, parsed.data.id), eq(projectsTable.userId, req.user.id)));
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
   const files = await db.select().from(projectFilesTable)
     .where(eq(projectFilesTable.projectId, parsed.data.id));
   res.json(files.map(serializeFile));

@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const projectsTable = pgTable("projects", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default(""),
   name: text("name").notNull(),
   description: text("description"),
   slug: text("slug").notNull().unique(),
@@ -50,6 +51,7 @@ export type Deployment = typeof deploymentsTable.$inferSelect;
 
 export const activityTable = pgTable("activity", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default(""),
   type: text("type").notNull(),
   message: text("message").notNull(),
   projectName: text("project_name").notNull(),
