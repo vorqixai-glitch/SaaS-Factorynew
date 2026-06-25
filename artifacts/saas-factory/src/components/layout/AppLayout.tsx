@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Plus, CreditCard, Layers, Menu, X, Zap } from "lucide-react";
+import { LayoutDashboard, Plus, CreditCard, Layers, Menu, X, Zap, LogOut, User } from "lucide-react";
 import { useState } from "react";
 import { useGetDashboardStats } from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -14,10 +15,61 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: stats } = useGetDashboardStats();
+  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
 
   const creditsUsed = stats?.creditsUsed ?? 0;
   const creditsTotal = 500;
   const creditsPercent = Math.min(100, (creditsUsed / creditsTotal) * 100);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Zap className="w-6 h-6 text-primary animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-6 max-w-sm mx-auto px-6">
+          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto">
+            <Zap className="w-7 h-7 text-primary" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Welcome to SaaS Factory</h1>
+            <p className="text-muted-foreground text-sm">Sign in to build and deploy your SaaS products with AI.</p>
+          </div>
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-left space-y-2">
+            <div className="flex items-center gap-2 text-primary font-medium">
+              <Zap className="w-3.5 h-3.5" /> Free account includes
+            </div>
+            <ul className="text-muted-foreground space-y-1 ml-5 list-disc text-xs">
+              <li>50 free AI credits on sign-up</li>
+              <li>1 project</li>
+              <li>All community templates</li>
+              <li>Manual deploy</li>
+            </ul>
+          </div>
+          <button
+            onClick={login}
+            className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-md font-semibold text-sm hover:opacity-90 transition-opacity"
+          >
+            <User className="w-4 h-4" />
+            Sign in / Sign up
+          </button>
+          <p className="text-xs text-muted-foreground">No credit card required</p>
+        </div>
+      </div>
+    );
+  }
+
+  const displayName = user?.firstName
+    ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ""}`
+    : user?.email ?? "Account";
+  const initials = user?.firstName
+    ? `${user.firstName[0]}${user.lastName?.[0] ?? ""}`.toUpperCase()
+    : "U";
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -44,7 +96,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-4 py-4 border-t border-sidebar-border">
+
+        {/* Credits bar */}
+        <div className="px-4 py-3 border-t border-sidebar-border">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-muted-foreground">Credits</span>
             <Link href="/billing" className="text-xs text-primary hover:opacity-80">Top up</Link>
@@ -59,6 +113,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             />
           </div>
           <div className="text-xs text-muted-foreground mt-1.5">{creditsUsed} / {creditsTotal} used</div>
+        </div>
+
+        {/* User footer */}
+        <div className="px-4 py-3 border-t border-sidebar-border flex items-center gap-2.5">
+          {user?.profileImageUrl ? (
+            <img src={user.profileImageUrl} alt={displayName} className="w-7 h-7 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0 text-xs font-bold text-primary">
+              {initials}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium truncate">{displayName}</div>
+            {user?.email && <div className="text-[10px] text-muted-foreground truncate">{user.email}</div>}
+          </div>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
         </div>
       </aside>
 

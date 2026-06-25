@@ -8,6 +8,10 @@
 
 export * from './activityItem';
 export * from './activityItemType';
+export * from './authorizationSessionHeaderParameter';
+export * from './authUser';
+export * from './authUserEnvelope';
+export * from './beginBrowserLoginParams';
 export * from './dashboardStats';
 export * from './dashboardStatsProjectsByStatus';
 export * from './deployment';
@@ -17,6 +21,7 @@ export * from './deploymentPlatform';
 export * from './deploymentStatus';
 export * from './generationInput';
 export * from './generationResult';
+export * from './handleBrowserLoginCallbackParams';
 export * from './healthStatus';
 export * from './project';
 export * from './projectFile';

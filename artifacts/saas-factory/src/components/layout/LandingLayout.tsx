@@ -1,7 +1,12 @@
 import { Link } from "wouter";
-import { Zap } from "lucide-react";
+import { Zap, User, LogOut } from "lucide-react";
+import { useAuth } from "@workspace/replit-auth-web";
 
 export default function LandingLayout({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated, login, logout } = useAuth();
+
+  const displayName = user?.firstName ?? user?.email?.split("@")[0] ?? "Account";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
@@ -18,10 +23,26 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
             <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign in</Link>
-            <Link href="/dashboard" className="bg-primary text-primary-foreground px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity">
-              Get started
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <span className="text-sm text-muted-foreground hidden sm:block">Hi, {displayName}</span>
+                <Link href="/dashboard" className="bg-primary text-primary-foreground px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity">
+                  Dashboard
+                </Link>
+                <button onClick={logout} className="text-muted-foreground hover:text-foreground transition-colors" title="Sign out">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={login} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5" /> Sign in
+                </button>
+                <button onClick={login} className="bg-primary text-primary-foreground px-4 py-1.5 rounded-md text-sm font-medium hover:opacity-90 transition-opacity">
+                  Get started free
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
